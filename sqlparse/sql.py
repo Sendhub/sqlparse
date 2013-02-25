@@ -388,10 +388,12 @@ class TokenList(Token):
     def get_alias(self):
         """Returns the alias for this identifier or ``None``."""
         kw = self.token_next_match(0, T.Keyword, 'AS')
+
         if kw is not None:
             alias = self.token_next(self.token_index(kw))
             if alias is None:
                 return None
+
         else:
             next_ = self.token_next_by_instance(0, Identifier)
             if next_ is None:
@@ -399,8 +401,18 @@ class TokenList(Token):
                 if next_ is None:
                     return None
             alias = next_
+
+        next2 = self.token_next(self.token_index(alias))
+        # If the candidate alias is followed by ".<someString>", then it must
+        # not really be an alias.
+        if next2 is not None and str(next2) == '.':
+            next3 = self.token_next(self.token_index(next2))
+            if next3 is not None and len(str(next3)) > 0:
+                return None
+
         if isinstance(alias, Identifier):
             return alias.get_name()
+
         return self._remove_quotes(unicode(alias))
 
     def get_name(self):
