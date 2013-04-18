@@ -562,4 +562,5 @@ KEYWORDS_COMMON = {
     'MIN': tokens.Keyword,
     'MAX': tokens.Keyword,
     'DISTINCT': tokens.Keyword,
+    'RETURNING': tokens.Keyword,
 }

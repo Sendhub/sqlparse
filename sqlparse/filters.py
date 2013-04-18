@@ -445,52 +445,77 @@ class RightMarginFilter:
 class ColumnsSelect:
     """Get the columns names of a SELECT query"""
     def process(self, stack, stream):
+        from .sql import Identifier, IdentifierList, Function
+
         mode = 0
-        oldValue = ""
+        previousToken = None
         parenthesis = 0
 
-        for token_type, value in stream:
-            # Ignore comments
-            if token_type in Comment:
-                continue
+        found = []
 
-            # We have not detected a SELECT statement
-            if mode == 0:
-                if token_type in Keyword and value == 'SELECT':
+        def processToken(token, mode, previousToken, parenthesis):
+            valueUpper = str(token.value).upper()
+
+            if hasattr(token, 'tokens') and len(token.tokens) > 1 and not isinstance(token, Function):
+                for t in token.tokens:
+                    mode, previousToken, parenthesis = processToken(t, mode, previousToken, parenthesis)
+
+            # Ignore comments
+            elif token.ttype in Comment:
+                pass
+
+            # We have not detected a SELECT or RETURNING statement.
+            elif mode == 0:
+                if token.ttype in Keyword and (valueUpper == 'SELECT' or valueUpper == 'RETURNING'):
                     mode = 1
 
-            # We have detected a SELECT statement
+            # We have detected a SELECT or RETURNING statement.
             elif mode == 1:
-                if value == 'FROM':
-                    if oldValue:
-                        yield oldValue
+                if valueUpper == 'FROM':
+                    if previousToken:
+                        found.append(previousToken)
 
-                    mode = 3    # Columns have been checked
+                    # Columns have been checked.
+                    mode = 3
 
-                elif value == 'AS':
-                    oldValue = ""
+                elif valueUpper == 'AS':
+                    previousToken = None
                     mode = 2
 
-                elif (token_type == Punctuation
-                      and value == ',' and not parenthesis):
-                    if oldValue:
-                        yield oldValue
-                    oldValue = ""
+                elif isinstance(token, IdentifierList):
+                    for x in token.tokens:
+                        #map(lambda s: s.strip().strip('"'), str(token.value).split(',')):
+                        found.append(x)
 
-                elif token_type not in Whitespace:
-                    if value == '(':
+                elif isinstance(token, Identifier) or isinstance(token, Function):
+                    found.append(token)
+
+                elif token.ttype == Punctuation and valueUpper == ',' and not parenthesis:
+                    if previousToken:
+                        found.append(previousToken)
+                    previousToken = None
+
+                elif token.ttype not in Whitespace:
+                    if valueUpper == '(':
                         parenthesis += 1
-                    elif value == ')':
+                    elif valueUpper == ')':
                         parenthesis -= 1
 
-                    oldValue += value
+                    previousToken = token
 
-            # We are processing an AS keyword
+            # We are processing an AS keyword.
             elif mode == 2:
-                # We check also for Keywords because a bug in SQLParse
-                if token_type == Name or token_type == Keyword:
-                    yield value
+                # We check also for Keywords because a bug in SQLParse.
+                if token.ttype == Name or token.ttype == Keyword:
+                    found.append(token)
                     mode = 1
+
+            return (mode, previousToken, parenthesis)
+
+        for token in stream:
+            mode, previousToken, parenthesis = processToken(token, mode, previousToken, parenthesis)
+
+        return found
 
 
 # ---------------------------
